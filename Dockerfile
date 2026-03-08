@@ -1,6 +1,8 @@
 FROM runpod/worker-v1-vllm:v2.14.0
 
-# Fix: Qwen3-VL crashes with "Qwen3VLTextConfig has no attribute
-# tie_word_embeddings" because the bundled transformers is too old.
-# Upgrade to latest transformers which has the complete Qwen3-VL config.
-RUN pip install --no-cache-dir --upgrade transformers
+# Fix: vLLM's qwen3_vl.py accesses config.tie_word_embeddings on
+# Qwen3VLTextConfig, but Qwen's config.json only has it at the top level
+# (not in text_config). The entrypoint monkey-patches the class to default
+# the attribute to False before vLLM loads.
+COPY entrypoint.py /entrypoint.py
+CMD ["python3", "/entrypoint.py"]
