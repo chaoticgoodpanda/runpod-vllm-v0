@@ -1,24 +1,39 @@
-"""Patch Qwen3VLTextConfig to add tie_word_embeddings attribute."""
-import inspect
-from transformers.models.qwen3_vl import configuration_qwen3_vl as mod
+"""Patch vLLM's qwen3_vl.py to safely access tie_word_embeddings.
 
-filepath = inspect.getfile(mod)
-print(f"Patching: {filepath}")
+The root cause: vLLM accesses config.tie_word_embeddings directly on
+Qwen3VLTextConfig. Even though transformers 4.57+ has this parameter in
+__init__, the V1 engine subprocess may load configs differently, losing
+the attribute. Fix: patch vLLM's source to use getattr with a default.
+"""
+import glob
+import os
+import re
 
-with open(filepath, "r") as f:
-    content = f.read()
+# Find vLLM's qwen3*.py files — qwen3_vl.py imports Qwen3ForCausalLM from qwen3.py,
+# which also accesses config.tie_word_embeddings in load_weights()
+vllm_paths = glob.glob("/usr/local/lib/python*/dist-packages/vllm/model_executor/models/qwen3*.py")
 
-if "tie_word_embeddings" in content:
-    print("Already has tie_word_embeddings, skipping")
-else:
-    content = content.replace(
-        "attention_dropout: float",
-        "tie_word_embeddings=False,\n        attention_dropout: float",
+for path in vllm_paths:
+    print(f"Patching vLLM: {path}")
+    with open(path, "r") as f:
+        content = f.read()
+
+    # Replace all X.tie_word_embeddings with getattr(X, 'tie_word_embeddings', False)
+    # Must capture dotted paths like self.config.tie_word_embeddings
+    original = content
+    content = re.sub(
+        r'([\w.]+)\.tie_word_embeddings',
+        r"getattr(\1, 'tie_word_embeddings', False)",
+        content,
     )
-    content = content.replace(
-        "self.attention_dropout = attention_dropout",
-        "self.attention_dropout = attention_dropout\n        self.tie_word_embeddings = tie_word_embeddings",
-    )
-    with open(filepath, "w") as f:
-        f.write(content)
-    print("Patched successfully")
+
+    if content != original:
+        with open(path, "w") as f:
+            f.write(content)
+        count = original.count('.tie_word_embeddings')
+        print(f"  Replaced {count} occurrences of .tie_word_embeddings with safe getattr")
+    else:
+        print("  No .tie_word_embeddings references found")
+
+if not vllm_paths:
+    print("WARNING: No vLLM qwen3_vl.py found!")
