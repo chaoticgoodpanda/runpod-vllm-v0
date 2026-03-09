@@ -9,8 +9,9 @@ import glob
 import os
 import re
 
-# Find vLLM's qwen3_vl.py
-vllm_paths = glob.glob("/usr/local/lib/python*/dist-packages/vllm/model_executor/models/qwen3_vl.py")
+# Find vLLM's qwen3*.py files — qwen3_vl.py imports Qwen3ForCausalLM from qwen3.py,
+# which also accesses config.tie_word_embeddings in load_weights()
+vllm_paths = glob.glob("/usr/local/lib/python*/dist-packages/vllm/model_executor/models/qwen3*.py")
 
 for path in vllm_paths:
     print(f"Patching vLLM: {path}")
