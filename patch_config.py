@@ -18,10 +18,11 @@ for path in vllm_paths:
     with open(path, "r") as f:
         content = f.read()
 
-    # Replace all bare config.tie_word_embeddings with getattr(config, 'tie_word_embeddings', False)
+    # Replace all X.tie_word_embeddings with getattr(X, 'tie_word_embeddings', False)
+    # Must capture dotted paths like self.config.tie_word_embeddings
     original = content
     content = re.sub(
-        r'(\w+)\.tie_word_embeddings',
+        r'([\w.]+)\.tie_word_embeddings',
         r"getattr(\1, 'tie_word_embeddings', False)",
         content,
     )
